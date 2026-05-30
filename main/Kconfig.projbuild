@@ -569,6 +569,9 @@ choice BOARD_TYPE
     config BOARD_TYPE_AI_VOX3
         bool "NULLLAB-AI-VOX3"
         depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ESP32_S3N16R8_EMOJI
+        bool "ESP32-S3N16R8-EMOJI 表情机器人开发板"
+        depends on IDF_TARGET_ESP32S3
 endchoice
 
 choice
