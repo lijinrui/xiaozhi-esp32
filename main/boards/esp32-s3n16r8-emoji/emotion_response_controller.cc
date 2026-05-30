@@ -9,7 +9,6 @@
 #include "emoji_controller.h"
 #include "servo_controller.h"
 #include "board.h"
-#include "mcp_server.h"
 #include "application.h"
 #include "audio/audio_codec.h"
 
@@ -902,19 +901,3 @@ bool EmotionResponseController::ShouldLookDown(const std::string& message) {
     
     return false;
 }
-
-// 情感物联网接口实现
-namespace iot {
-    // 全局情感响应控制器指针，用于默认构造函数
-    static EmotionResponseController* g_emotion_controller = nullptr;
-    
-    // 设置全局情感响应控制器指针
-    void SetGlobalEmotionController(EmotionResponseController* controller) {
-        g_emotion_controller = controller;
-    }
-    
-    // 获取全局情感响应控制器指针
-    EmotionResponseController* GetGlobalEmotionController() {
-        return g_emotion_controller;
-    }
-} // namespace iot

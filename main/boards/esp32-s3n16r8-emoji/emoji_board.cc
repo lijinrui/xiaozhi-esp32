@@ -11,7 +11,6 @@
 #include "servo_controller.h"
 #include "emotion_response_controller.h"
 
-#include <wifi_station.h>
 #include <esp_log.h>
 #include <string>
 #include <vector>
@@ -197,8 +196,9 @@ private:
         boot_button_.OnClick([this]() {
             // 无论在哪种模式下，短按BOOT按钮都进入录音状态
             auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-                ResetWifiConfiguration();
+            if (app.GetDeviceState() == kDeviceStateStarting) {
+                EnterWifiConfigMode();
+                return;
             }
             app.ToggleChatState();
         });

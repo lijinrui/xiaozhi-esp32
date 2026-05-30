@@ -15,8 +15,7 @@
 #include <unordered_map>
 #include "emoji_controller.h"
 #include "servo_controller.h"
-#include "audio_codec.h"
-#include "mcp_server.h"
+#include "audio/audio_codec.h"
 
 // 前向声明
 class EmotionResponseController;
@@ -194,13 +193,5 @@ private:
      */
     void ExecuteEmotionAction(const std::string& emotion);
 };
-
-namespace iot {
-    // 设置全局情感响应控制器指针的函数声明
-    void SetGlobalEmotionController(EmotionResponseController* controller);
-    
-    // 获取全局情感响应控制器指针的函数声明
-    EmotionResponseController* GetGlobalEmotionController();
-} // namespace iot
 
 #endif // EMOTION_RESPONSE_CONTROLLER_H
