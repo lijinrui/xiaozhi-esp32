@@ -84,25 +84,26 @@ kAecOnDeviceSide -> kListeningModeRealtime
 
 ## 2. 分支策略
 
-当前本地 `xiaozhi-esp32` 在 `feat/deskemoji-board`，且有未提交 DeskEmoji 改动：
+当前立创全双工固件任务已从固件 `main` 单独开分支：
 
 ```text
-M main/CMakeLists.txt
-M main/Kconfig.projbuild
-?? main/boards/esp32-s3n16r8-emoji/
-?? sdkconfig.bak
+feat/lichuang-s3-full-duplex
 ```
 
-建议：
+DeskEmoji 分支是独立任务：
+
+```text
+feat/deskemoji-board
+```
+
+要求：
 
 ```text
 1. 不在 feat/deskemoji-board 上继续做立创改造。
-2. 从干净的 upstream/main 或当前可构建主线新建分支：
-   feat/lichuang-s3-full-duplex
-3. DeskEmoji 未提交改动先保留但不要混入本任务。
+2. 不直接在固件 main 上做全双工实验。
+3. server 暂不合 main，真机联调时使用 server 的 feat/server-offline-barge-in-turns 分支或对应测试部署。
+4. 本地构建产物 build-lichuang/ 和 sdkconfig.bak 不提交。
 ```
-
-如果必须在当前机器继续做，先确认 DeskEmoji 改动是否要 stash 或单独提交，避免误合并。
 
 ## 3. 阶段 A：基础真机复测
 
@@ -381,10 +382,89 @@ AEC on 比 AEC off 的播放中误触发/漏检更好。
 ## 11. 推荐下一步
 
 ```text
-1. 合并/拉取 server 第一阶段分支。
-2. 在 xiaozhi-esp32 从干净主线新建 feat/lichuang-s3-full-duplex。
+1. 使用 server feat/server-offline-barge-in-turns 分支或对应测试 server 做真机联调；server 暂不合 main。
+2. 在 xiaozhi-esp32 的 feat/lichuang-s3-full-duplex 分支继续固件改造。
 3. 用现有 lichuang-dev 固件跑真机 smoke。
 4. 如果 stop 有残留，先修 ResetDecoder/clear queue。
 5. 如果播放中不能触发 abort，修 speaking 状态下的 voice processing/wake/VAD。
 6. 如果 AEC 效果不稳定，再做三路音频诊断和 input_format 修正。
+```
+
+## 12. 本地离线验证结果（2026-06-03）
+
+已完成不依赖模型、不依赖真机的本地验证：
+
+```text
+ESP-IDF: /Users/wangjinyuan1/esp/esp-idf
+idf.py --version: ESP-IDF v5.5.2
+branch: feat/lichuang-s3-full-duplex
+```
+
+构建命令：
+
+```bash
+source /Users/wangjinyuan1/esp/esp-idf/export.sh >/tmp/xiaozhi-idf-export.log
+idf.py -B build-lichuang \
+  -DSDKCONFIG=/private/tmp/xiaozhi-lichuang-sdkconfig \
+  -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;/private/tmp/xiaozhi-lichuang.defaults" \
+  build
+```
+
+临时 defaults：
+
+```text
+CONFIG_BOARD_TYPE_LICHUANG_DEV_S3=y
+CONFIG_USE_DEVICE_AEC=y
+```
+
+构建结论：
+
+```text
+PASS
+target: esp32s3
+board: CONFIG_BOARD_TYPE_LICHUANG_DEV_S3=y
+device AEC: CONFIG_USE_DEVICE_AEC=y
+server AEC: # CONFIG_USE_SERVER_AEC is not set
+xiaozhi.bin size: 0x2cc2e0
+smallest app partition: 0x3f0000
+free: 0x123d20, about 29%
+```
+
+生成的主要产物：
+
+```text
+build-lichuang/bootloader/bootloader.bin
+build-lichuang/partition_table/partition-table.bin
+build-lichuang/ota_data_initial.bin
+build-lichuang/xiaozhi.bin
+build-lichuang/generated_assets.bin
+```
+
+静态代码复核结论：
+
+```text
+1. CONFIG_USE_DEVICE_AEC 会让 Application 默认 aec_mode_ = kAecOnDeviceSide。
+2. kAecOnDeviceSide 下 GetDefaultListeningMode() 返回 kListeningModeRealtime。
+3. AbortSpeaking() 会调用 protocol_->SendAbortSpeaking(reason)。
+4. HandleWakeWordDetectedEvent() 在 speaking/listening 状态可触发 AbortSpeaking(kAbortReasonWakeWordDetected)。
+5. AudioService::ResetDecoder() 会清 timestamp_queue_、audio_decode_queue_、audio_playback_queue_、audio_testing_queue_。
+6. 收到 server tts stop 的分支目前主要切状态，没有直接调用 audio_service_.ResetDecoder()。
+```
+
+因此，离线验证后的第一优先级代码任务仍然是：
+
+```text
+收到 {"type":"tts","state":"stop"} 且设备正在 speaking 时，
+立即 ResetDecoder()/清播放队列，
+并通过日志或测试确认不会继续播放上一轮残留音频。
+```
+
+本地验证无法覆盖的部分：
+
+```text
+1. speaker 实际停播延迟。
+2. 播放中 mic capture 是否持续。
+3. ES7210 实际通道顺序和 reference 通道。
+4. AEC 对播放回声、误唤醒、漏打断的真实效果。
+5. 插话后第二轮对话的整链路体验。
 ```
