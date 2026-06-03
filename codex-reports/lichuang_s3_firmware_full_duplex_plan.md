@@ -468,3 +468,84 @@ build-lichuang/generated_assets.bin
 4. AEC 对播放回声、误唤醒、漏打断的真实效果。
 5. 插话后第二轮对话的整链路体验。
 ```
+
+## 13. P0 代码改动与验证（2026-06-03）
+
+已实际改动：
+
+```text
+main/application.cc
+```
+
+改动内容：
+
+```text
+收到 {"type":"tts","state":"stop"} 且当前状态是 kDeviceStateSpeaking 时：
+1. 打日志：TTS stopped, clearing decoder and playback queues
+2. 立即调用 audio_service_.ResetDecoder()
+3. 再按 listening_mode_ 切到 Idle 或 Listening
+```
+
+新增离线验证脚本：
+
+```text
+scripts/verify_firmware_barge_in.py
+```
+
+脚本检查的关键约束：
+
+```text
+1. tts stop 分支必须存在。
+2. tts stop 分支必须在 speaking 状态下处理。
+3. tts stop 分支必须调用 audio_service_.ResetDecoder()。
+4. ResetDecoder() 必须发生在 SetDeviceState() 之前。
+5. AudioService::ResetDecoder() 必须清 timestamp_queue_、audio_decode_queue_、audio_playback_queue_、audio_testing_queue_。
+6. ResetDecoder() 必须 notify audio_queue_cv_。
+7. AbortSpeaking() 必须向 server 发送 abort。
+8. AEC 开启时默认 listening mode 必须是 kListeningModeRealtime。
+```
+
+已跑验证：
+
+```bash
+python3 scripts/verify_firmware_barge_in.py
+```
+
+结果：
+
+```text
+PASS: firmware barge-in source invariants hold
+```
+
+已跑立创板构建：
+
+```bash
+source /Users/wangjinyuan1/esp/esp-idf/export.sh >/tmp/xiaozhi-idf-export.log
+idf.py -B build-lichuang \
+  -DSDKCONFIG=/private/tmp/xiaozhi-lichuang-sdkconfig \
+  -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;/private/tmp/xiaozhi-lichuang.defaults" \
+  build
+```
+
+结果：
+
+```text
+PASS
+xiaozhi.bin binary size: 0x2cc340
+smallest app partition: 0x3f0000
+free: 0x123cc0, about 29%
+```
+
+这次代码改动解决的是 server 已经验证过的 abort/stop 链路中的固件侧第一缺口：
+
+```text
+server 下发 tts stop 后，设备不应继续播放旧 decoder/playback queue 中的残留音频。
+```
+
+仍需真机验证：
+
+```text
+1. stop 到实际 speaker 静音是否 <= 200ms。
+2. 播放中唤醒词/插话是否稳定触发 AbortSpeaking()。
+3. AEC/reference 通道是否正确。
+```

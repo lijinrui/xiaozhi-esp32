@@ -531,6 +531,8 @@ void Application::InitializeProtocol() {
             } else if (strcmp(state->valuestring, "stop") == 0) {
                 Schedule([this]() {
                     if (GetDeviceState() == kDeviceStateSpeaking) {
+                        ESP_LOGI(TAG, "TTS stopped, clearing decoder and playback queues");
+                        audio_service_.ResetDecoder();
                         if (listening_mode_ == kListeningModeManualStop) {
                             SetDeviceState(kDeviceStateIdle);
                         } else {
@@ -1128,4 +1130,3 @@ void Application::ResetProtocol() {
         protocol_.reset();
     });
 }
-
