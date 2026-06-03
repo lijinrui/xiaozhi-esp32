@@ -942,10 +942,15 @@ void Application::Schedule(std::function<void()>&& callback) {
 }
 
 void Application::AbortSpeaking(AbortReason reason) {
-    ESP_LOGI(TAG, "Abort speaking");
+    auto state = GetDeviceState();
+    ESP_LOGI(TAG, "Abort speaking, reason: %d, state: %d", (int)reason, (int)state);
     aborted_ = true;
     if (protocol_) {
         protocol_->SendAbortSpeaking(reason);
+    }
+    if (state == kDeviceStateSpeaking) {
+        ESP_LOGI(TAG, "Abort speaking locally, clearing decoder and playback queues");
+        audio_service_.ResetDecoder();
     }
 }
 

@@ -79,11 +79,26 @@ def main() -> None:
         "ResetDecoder must notify queue waiters after clearing playback",
     )
 
-    require(
+    abort_speaking = require(
         r"void Application::AbortSpeaking\(AbortReason reason\).*?"
-        r"protocol_->SendAbortSpeaking\(reason\)",
+        r"\n\}",
         application,
+        "cannot find Application::AbortSpeaking",
+    ).group(0)
+    require(
+        r"protocol_->SendAbortSpeaking\(reason\)",
+        abort_speaking,
         "AbortSpeaking must send abort to the server",
+    )
+    require(
+        r"state == kDeviceStateSpeaking",
+        abort_speaking,
+        "AbortSpeaking must only clear local playback while speaking",
+    )
+    require(
+        r"audio_service_\.ResetDecoder\(\)",
+        abort_speaking,
+        "AbortSpeaking must clear local decoder/playback queues while speaking",
     )
     require(
         r"ListeningMode Application::GetDefaultListeningMode\(\) const \{.*?"

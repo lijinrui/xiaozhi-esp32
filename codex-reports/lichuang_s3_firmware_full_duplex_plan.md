@@ -549,3 +549,35 @@ server 下发 tts stop 后，设备不应继续播放旧 decoder/playback queue 
 2. 播放中唤醒词/插话是否稳定触发 AbortSpeaking()。
 3. AEC/reference 通道是否正确。
 ```
+
+## 14. 本地 abort 立即停播改动（2026-06-03）
+
+继续补齐第二个稳妥改动：
+
+```text
+main/application.cc
+```
+
+改动内容：
+
+```text
+AbortSpeaking(reason) 中：
+1. 记录 abort reason 和当前 state。
+2. 仍然先向 server 发送 abort，保持 server 侧取消低延迟。
+3. 如果当前 state == kDeviceStateSpeaking，立即 audio_service_.ResetDecoder()。
+```
+
+原因：
+
+```text
+播放中用户本地插话/唤醒已经触发 AbortSpeaking() 时，
+设备端不应该等 server 回 {"type":"tts","state":"stop"} 才清旧 TTS 队列。
+```
+
+边界：
+
+```text
+1. 只在当前状态是 kDeviceStateSpeaking 时清播放队列。
+2. listening/idle 等状态调用 AbortSpeaking() 不会额外 ResetDecoder()。
+3. 后续 server tts stop 再 ResetDecoder() 一次是幂等行为。
+```
