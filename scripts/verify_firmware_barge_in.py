@@ -48,6 +48,12 @@ def main() -> None:
         "tts stop must only clear active speaking playback",
     )
     require(
+        r"!turn_id_str\.empty\(\) && !current_tts_turn_id_\.empty\(\) && "
+        r"turn_id_str != current_tts_turn_id_",
+        stop_branch,
+        "tts stop must ignore stale turn_id when both sides provide one",
+    )
+    require(
         r"audio_service_\.ResetDecoder\(\)",
         stop_branch,
         "tts stop must reset decoder/playback queues before leaving speaking",
@@ -56,6 +62,33 @@ def main() -> None:
     state_pos = stop_branch.find("SetDeviceState(")
     if reset_pos == -1 or state_pos == -1 or reset_pos > state_pos:
         fail("tts stop must reset decoder/playback queues before SetDeviceState")
+    require(
+        r"current_tts_turn_id_\.clear\(\)",
+        stop_branch,
+        "tts stop must clear current_tts_turn_id_ after accepting stop",
+    )
+
+    start_branch = require(
+        r'if \(strcmp\(state->valuestring, "start"\) == 0\) \{(?P<body>.*?)'
+        r'\} else if \(strcmp\(state->valuestring, "stop"\) == 0\)',
+        application,
+        "cannot find the tts start branch in application.cc",
+    ).group("body")
+    require(
+        r"current_tts_turn_id_ = turn_id_str",
+        start_branch,
+        "tts start must remember turn_id when provided",
+    )
+    require(
+        r'auto turn_id = cJSON_GetObjectItem\(root, "turn_id"\)',
+        application,
+        "tts handler must parse optional turn_id",
+    )
+    require(
+        r"cJSON_IsString\(turn_id\) \? turn_id->valuestring : \"\"",
+        application,
+        "missing/non-string turn_id must remain backward compatible",
+    )
 
     reset_decoder = require(
         r"void AudioService::ResetDecoder\(\) \{(?P<body>.*?)\n\}",

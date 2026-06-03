@@ -523,16 +523,28 @@ void Application::InitializeProtocol() {
         auto type = cJSON_GetObjectItem(root, "type");
         if (strcmp(type->valuestring, "tts") == 0) {
             auto state = cJSON_GetObjectItem(root, "state");
+            auto turn_id = cJSON_GetObjectItem(root, "turn_id");
+            std::string turn_id_str = cJSON_IsString(turn_id) ? turn_id->valuestring : "";
             if (strcmp(state->valuestring, "start") == 0) {
-                Schedule([this]() {
+                Schedule([this, turn_id_str]() {
                     aborted_ = false;
+                    current_tts_turn_id_ = turn_id_str;
+                    if (!current_tts_turn_id_.empty()) {
+                        ESP_LOGI(TAG, "TTS start turn_id=%s", current_tts_turn_id_.c_str());
+                    }
                     SetDeviceState(kDeviceStateSpeaking);
                 });
             } else if (strcmp(state->valuestring, "stop") == 0) {
-                Schedule([this]() {
+                Schedule([this, turn_id_str]() {
                     if (GetDeviceState() == kDeviceStateSpeaking) {
+                        if (!turn_id_str.empty() && !current_tts_turn_id_.empty() && turn_id_str != current_tts_turn_id_) {
+                            ESP_LOGW(TAG, "Ignoring stale TTS stop turn_id=%s current=%s",
+                                turn_id_str.c_str(), current_tts_turn_id_.c_str());
+                            return;
+                        }
                         ESP_LOGI(TAG, "TTS stopped, clearing decoder and playback queues");
                         audio_service_.ResetDecoder();
+                        current_tts_turn_id_.clear();
                         if (listening_mode_ == kListeningModeManualStop) {
                             SetDeviceState(kDeviceStateIdle);
                         } else {

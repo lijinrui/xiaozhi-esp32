@@ -581,3 +581,44 @@ AbortSpeaking(reason) 中：
 2. listening/idle 等状态调用 AbortSpeaking() 不会额外 ResetDecoder()。
 3. 后续 server tts stop 再 ResetDecoder() 一次是幂等行为。
 ```
+
+## 15. 固件侧 tts stop turn_id guard（2026-06-03）
+
+继续补齐协议兼容的 turn guard：
+
+```text
+main/application.h
+main/application.cc
+scripts/verify_firmware_barge_in.py
+```
+
+改动内容：
+
+```text
+1. tts start 如果带 turn_id，记录 current_tts_turn_id_。
+2. tts stop 如果带 turn_id，且本地 current_tts_turn_id_ 也存在，则必须匹配才执行 ResetDecoder()/状态切换。
+3. tts stop 缺 turn_id 时继续走老逻辑，兼容旧 server。
+4. tts start 缺 turn_id 时 current_tts_turn_id_ 为空，兼容旧 server。
+5. 接受 tts stop 后清空 current_tts_turn_id_。
+```
+
+兼容性：
+
+```text
+老 server：
+  {"type":"tts","state":"start"}
+  {"type":"tts","state":"stop"}
+  固件照常 start/stop，不做 turn_id 拦截。
+
+新 server：
+  {"type":"tts","state":"start","turn_id":"..."}
+  {"type":"tts","state":"stop","turn_id":"..."}
+  固件只接受当前 turn 的 stop，旧 turn stop 会被忽略。
+```
+
+边界：
+
+```text
+1. 二进制 Opus audio packet 目前没有 turn_id，旧音频包过滤仍主要依赖 server turn guard。
+2. 固件侧 turn_id guard 只保护 tts stop 这类文本控制消息，避免旧 stop 误伤新 speaking。
+```
