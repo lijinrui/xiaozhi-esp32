@@ -34,6 +34,8 @@ def require(pattern: str, text: str, message: str, flags: int = re.S) -> re.Matc
 def main() -> None:
     application = read("main/application.cc")
     audio_service = read("main/audio/audio_service.cc")
+    lichuang_config = read("main/boards/lichuang-dev/config.h")
+    lichuang_board_config = read("main/boards/lichuang-dev/config.json")
 
     stop_branch = require(
         r'else if \(strcmp\(state->valuestring, "stop"\) == 0\) \{(?P<body>.*?)'
@@ -138,6 +140,31 @@ def main() -> None:
         r"aec_mode_ == kAecOff \? kListeningModeAutoStop : kListeningModeRealtime",
         application,
         "device/server AEC must default to realtime listening mode",
+    )
+    speaking_state = require(
+        r"case kDeviceStateSpeaking:(?P<body>.*?)\n\s*break;",
+        application,
+        "cannot find kDeviceStateSpeaking handler",
+    ).group("body")
+    require(
+        r"listening_mode_ != kListeningModeRealtime",
+        speaking_state,
+        "speaking state must keep voice processing enabled in realtime mode",
+    )
+    require(
+        r"audio_service_\.EnableVoiceProcessing\(false\)",
+        speaking_state,
+        "speaking state must explicitly disable voice processing outside realtime mode",
+    )
+    require(
+        r"#define AUDIO_INPUT_REFERENCE\s+true",
+        lichuang_config,
+        "lichuang-dev must expose playback reference channel for device AEC",
+    )
+    require(
+        r'"CONFIG_USE_DEVICE_AEC=y"',
+        lichuang_board_config,
+        "lichuang-dev board config must enable device-side AEC",
     )
 
     print("PASS: firmware barge-in source invariants hold")
