@@ -37,8 +37,18 @@ void AfeAudioProcessor::Initialize(AudioCodec* codec, int frame_duration_ms, srm
     char* ns_model_name = esp_srmodel_filter(models, ESP_NSNET_PREFIX, NULL);
     char* vad_model_name = esp_srmodel_filter(models, ESP_VADN_PREFIX, NULL);
     
-    afe_config_t* afe_config = afe_config_init(input_format.c_str(), NULL, AFE_TYPE_VC, AFE_MODE_HIGH_PERF);
+    afe_config_t* afe_config = afe_config_init(input_format.c_str(), NULL, AFE_TYPE_VC,
+#if CONFIG_BOARD_TYPE_LICHUANG_DEV_S3
+        AFE_MODE_LOW_COST
+#else
+        AFE_MODE_HIGH_PERF
+#endif
+    );
+#if CONFIG_BOARD_TYPE_LICHUANG_DEV_S3
+    afe_config->aec_mode = AEC_MODE_VOIP_LOW_COST;
+#else
     afe_config->aec_mode = AEC_MODE_VOIP_HIGH_PERF;
+#endif
     afe_config->vad_mode = VAD_MODE_0;
     afe_config->vad_min_noise_ms = 100;
     if (vad_model_name != nullptr) {
@@ -54,7 +64,13 @@ void AfeAudioProcessor::Initialize(AudioCodec* codec, int frame_duration_ms, srm
     }
 
     afe_config->agc_init = false;
+#if CONFIG_BOARD_TYPE_LICHUANG_DEV_S3
+    afe_config->memory_alloc_mode = AFE_MEMORY_ALLOC_INTERNAL_PSRAM_BALANCE;
+    afe_config->afe_perferred_core = 1;
+    afe_config->afe_perferred_priority = 2;
+#else
     afe_config->memory_alloc_mode = AFE_MEMORY_ALLOC_MORE_PSRAM;
+#endif
 
 #ifdef CONFIG_USE_DEVICE_AEC
     afe_config->aec_init = true;
@@ -71,7 +87,13 @@ void AfeAudioProcessor::Initialize(AudioCodec* codec, int frame_duration_ms, srm
         auto this_ = (AfeAudioProcessor*)arg;
         this_->AudioProcessorTask();
         vTaskDelete(NULL);
-    }, "audio_communication", 4096, this, 3, NULL);
+    }, "audio_communication",
+#if CONFIG_BOARD_TYPE_LICHUANG_DEV_S3
+        6144,
+#else
+        4096,
+#endif
+        this, 3, NULL);
 }
 
 AfeAudioProcessor::~AfeAudioProcessor() {
@@ -100,6 +122,10 @@ void AfeAudioProcessor::Feed(std::vector<int16_t>&& data) {
     }
     input_buffer_.insert(input_buffer_.end(), data.begin(), data.end());
     size_t chunk_size = afe_iface_->get_feed_chunksize(afe_data_) * codec_->input_channels();
+    if (input_buffer_.size() > chunk_size * 4) {
+        ESP_LOGW(TAG, "AFE input backlog too large, dropping stale samples");
+        input_buffer_.erase(input_buffer_.begin(), input_buffer_.end() - chunk_size * 2);
+    }
     while (input_buffer_.size() >= chunk_size) {
         afe_iface_->feed(afe_data_, input_buffer_.data());
         input_buffer_.erase(input_buffer_.begin(), input_buffer_.begin() + chunk_size);

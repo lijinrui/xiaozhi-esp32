@@ -446,6 +446,10 @@ void AudioService::OpusCodecTask() {
 }
 
 void AudioService::SetDecodeSampleRate(int sample_rate, int frame_duration) {
+    if (sample_rate <= 0 || frame_duration <= 0 || AS_OPUS_GET_FRAME_DRU_ENUM(frame_duration) < 0) {
+        ESP_LOGW(TAG, "Ignore invalid decoder config: sample_rate=%d frame_duration=%d", sample_rate, frame_duration);
+        return;
+    }
     if (decoder_sample_rate_ == sample_rate && decoder_duration_ms_ == frame_duration) {
         return;
     }
@@ -509,6 +513,7 @@ bool AudioService::PushPacketToDecodeQueue(std::unique_ptr<AudioStreamPacket> pa
         if (wait) {
             audio_queue_cv_.wait(lock, [this]() { return audio_decode_queue_.size() < MAX_DECODE_PACKETS_IN_QUEUE; });
         } else {
+            ESP_LOGW(TAG, "Audio decode queue full, dropping incoming packet");
             return false;
         }
     }
