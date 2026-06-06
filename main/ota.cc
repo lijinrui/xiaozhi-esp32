@@ -24,7 +24,6 @@
 
 #define TAG "Ota"
 
-
 Ota::Ota() {
 #ifdef ESP_EFUSE_BLOCK_USR_DATA
     // Read Serial Number from efuse user_data

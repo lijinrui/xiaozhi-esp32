@@ -615,6 +615,8 @@ void Application::InitializeProtocol() {
                 ESP_LOGW(TAG, "Invalid custom message format: missing payload");
             }
 #endif
+        } else if (strcmp(type->valuestring, "turn_metrics") == 0) {
+            // Server-side diagnostics only; firmware does not need to render it.
         } else {
             ESP_LOGW(TAG, "Unknown message type: %s", type->valuestring);
         }
